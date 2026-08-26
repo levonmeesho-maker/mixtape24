@@ -1,0 +1,6 @@
+{
+  "appId": "com.mixtape.app",
+  "appName": "Mixtape",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
