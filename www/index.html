@@ -319,12 +319,12 @@
       </button>
     </nav>
     <div class="tapes-section">
-      <div class="section-label">Tapes</div>
+      <div class="section-label">Playlists</div>
       <div id="tapesList"></div>
     </div>
     <button class="new-tape-btn" id="newTapeBtn">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      New Tape
+      New playlist
     </button>
   </aside>
 
@@ -413,6 +413,79 @@ let openMenuId = null;
 let uid = 0;
 const nextId = () => 't' + (++uid);
 
+const DB_NAME = 'mixtapeDB';
+const DB_VERSION = 1;
+let db = null;
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const database = e.target.result;
+      if(!database.objectStoreNames.contains('tracks')) database.createObjectStore('tracks', {keyPath:'id'});
+      if(!database.objectStoreNames.contains('tapes')) database.createObjectStore('tapes', {keyPath:'id'});
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = (e) => reject(e);
+  });
+}
+const dbReady = openDB();
+
+function dbPut(storeName, obj){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(obj);
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e);
+  });
+}
+function dbGetAll(storeName){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = (e) => reject(e);
+  });
+}
+function dbDelete(storeName, id){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e);
+  });
+}
+async function persistTrack(track){
+  await dbReady;
+  await dbPut('tracks', {id:track.id, title:track.title, duration:track.duration, favorite:track.favorite, tapeIds:track.tapeIds, blob:track.blob});
+}
+async function persistTape(tape){
+  await dbReady;
+  await dbPut('tapes', {id:tape.id, name:tape.name});
+}
+async function loadAll(){
+  await dbReady;
+  const [storedTracks, storedTapes] = await Promise.all([dbGetAll('tracks'), dbGetAll('tapes')]);
+  tapes = storedTapes;
+  tracks = storedTracks.map(rec => ({
+    id: rec.id,
+    title: rec.title,
+    duration: rec.duration || 0,
+    favorite: !!rec.favorite,
+    tapeIds: rec.tapeIds || [],
+    blob: rec.blob,
+    url: URL.createObjectURL(rec.blob)
+  }));
+  let maxNum = 0;
+  [...tracks, ...tapes].forEach(o => {
+    const m = /^t(\d+)$/.exec(o.id);
+    if(m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+  });
+  uid = maxNum;
+  renderTapes();
+  renderTracks();
+}
+
 function fmtTime(s){
   if(!isFinite(s) || s < 0) s = 0;
   const m = Math.floor(s/60);
@@ -432,6 +505,7 @@ function addFiles(fileList){
       id: nextId(),
       title: niceName(file.name),
       url,
+      blob: file,
       duration: 0,
       favorite: false,
       tapeIds: []
@@ -443,6 +517,7 @@ function addFiles(fileList){
     a.addEventListener('loadedmetadata', () => {
       track.duration = a.duration;
       renderTracks();
+      persistTrack(track);
     });
   });
   renderTracks();
@@ -467,17 +542,19 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 });
 
 document.getElementById('newTapeBtn').addEventListener('click', () => {
-  const name = prompt('Name this tape');
+  const name = prompt('Name this playlist');
   if(name && name.trim()){
-    tapes.push({id: nextId(), name: name.trim()});
+    const tape = {id: nextId(), name: name.trim()};
+    tapes.push(tape);
     renderTapes();
+    persistTape(tape);
   }
 });
 
 function renderTapes(){
   const el = document.getElementById('tapesList');
   if(tapes.length === 0){
-    el.innerHTML = '<div class="no-tapes">No tapes yet. Record one to start grouping tracks.</div>';
+    el.innerHTML = '<div class="no-tapes">No playlists yet. Create one to start grouping tracks.</div>';
     return;
   }
   el.innerHTML = '';
@@ -530,7 +607,7 @@ function renderTracks(){
     head.style.display = 'grid';
     let msg = 'Nothing to show here yet.';
     if(view === 'favorites') msg = "You haven't favorited any tracks yet.";
-    if(view === 'tape') msg = 'This tape is empty. Add tracks with the + button.';
+    if(view === 'tape') msg = 'This playlist is empty. Add tracks with the + button.';
     el.innerHTML = `<div class="empty-state"><b>Nothing here</b><span>${msg}</span></div>`;
     return;
   }
@@ -552,7 +629,7 @@ function renderTracks(){
       <button class="icon-btn fav ${track.favorite ? 'active' : ''}" aria-label="Favorite" data-id="${track.id}">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="${track.favorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.35-9.5-8.8C.9 8.8 2.6 5 6.2 5c2 0 3.3 1 4.8 3 1.5-2 2.8-3 4.8-3 3.6 0 5.3 3.8 3.7 7.2C19 16.65 12 21 12 21z"/></svg>
       </button>
-      <button class="icon-btn add" aria-label="Add to tape" data-id="${track.id}">
+      <button class="icon-btn add" aria-label="Add to playlist" data-id="${track.id}">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </button>
     `;
@@ -565,6 +642,7 @@ function renderTracks(){
       track.favorite = !track.favorite;
       renderTracks();
       renderTapes();
+      persistTrack(track);
     });
     row.querySelector('.add').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -581,7 +659,7 @@ function toggleTapeMenu(track, row){
   const menu = document.createElement('div');
   menu.className = 'add-tape-menu';
   if(tapes.length === 0){
-    menu.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-faint);">No tapes yet — create one first.</div>';
+    menu.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--text-faint);">No playlists yet — create one first.</div>';
   } else {
     menu.innerHTML = tapes.map(tape => {
       const checked = track.tapeIds.includes(tape.id);
@@ -597,6 +675,7 @@ function toggleTapeMenu(track, row){
       if(idx === -1) track.tapeIds.push(tid); else track.tapeIds.splice(idx,1);
       btn.classList.toggle('checked');
       renderTapes();
+      persistTrack(track);
     });
   });
   setTimeout(() => {
@@ -623,7 +702,7 @@ function playTrackById(id){
 function updateNowPlaying(){
   const track = tracks[currentIndex];
   document.getElementById('npTitle').textContent = track ? track.title : 'Nothing playing';
-  document.getElementById('npSub').textContent = track ? 'Playing from ' + (view === 'favorites' ? 'Favorites' : view === 'tape' ? (tapes.find(t=>t.id===currentTapeId)||{}).name || 'Tape' : 'All Songs') : '—';
+  document.getElementById('npSub').textContent = track ? 'Playing from ' + (view === 'favorites' ? 'Favorites' : view === 'tape' ? (tapes.find(t=>t.id===currentTapeId)||{}).name || 'Playlist' : 'All Songs') : '—';
   renderTracks();
 }
 
@@ -718,8 +797,7 @@ const volume = document.getElementById('volume');
 volume.addEventListener('input', () => { audio.volume = volume.value / 100; });
 audio.volume = 0.8;
 
-renderTapes();
-renderTracks();
+loadAll();
 </script>
 </body>
 </html>
