@@ -242,6 +242,7 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </div>
+  <input type="file" id="fileInput" multiple accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac" style="display:none;">
 
   <div class="backdrop" id="backdrop"></div>
   <div class="drawer" id="drawer">
@@ -373,8 +374,7 @@
 
 <script>
 const audio = document.getElementById('audio');
-const fileInput = Object.assign(document.createElement('input'), {type:'file', multiple:true, accept:'audio/*', style:'display:none'});
-document.body.appendChild(fileInput);
+const fileInput = document.getElementById('fileInput');
 
 let tracks = [];
 let tapes = [];
@@ -523,8 +523,17 @@ function updateTitle(){
 }
 
 /* ---------------- add songs ---------------- */
+function isAudioFile(f){
+  if(f.type && f.type.startsWith('audio/')) return true;
+  if(/\.(mp3|wav|m4a|ogg|oga|flac|aac|wma|opus|amr)$/i.test(f.name)) return true;
+  // Some Android file pickers return an empty/unknown MIME type for content:// picks.
+  // Since the picker was already restricted to audio, accept unknown-type files too.
+  if(!f.type) return true;
+  return false;
+}
 function addFiles(fileList){
-  const files = Array.from(fileList).filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|flac|aac)$/i.test(f.name));
+  const all = Array.from(fileList || []);
+  const files = all.filter(isAudioFile);
   files.forEach(file => {
     const url = URL.createObjectURL(file);
     const track = { id: nextId(), title: niceName(file.name), url, blob: file, duration: 0, favorite: false, tapeIds: [] };
@@ -540,9 +549,15 @@ function addFiles(fileList){
     });
   });
   renderAll();
+  if(all.length > 0 && files.length === 0){
+    alert('Could not add the selected file(s) — the file type was not recognized as audio.');
+  }
 }
 document.getElementById('addCircle').addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => addFiles(e.target.files));
+fileInput.addEventListener('change', e => {
+  addFiles(e.target.files);
+  fileInput.value = '';
+});
 const ac = document.getElementById('addCircle');
 ['dragenter','dragover'].forEach(ev => ac.addEventListener(ev, e => { e.preventDefault(); ac.classList.add('drag'); }));
 ['dragleave','drop'].forEach(ev => ac.addEventListener(ev, e => { e.preventDefault(); ac.classList.remove('drag'); }));
