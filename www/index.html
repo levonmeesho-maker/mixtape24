@@ -748,6 +748,7 @@ function playTrackById(id){
   const p = audio.play();
   if(p && p.catch) p.catch(err => console.error('Playback failed:', err));
   renderAll();
+  updateMediaSession();
 }
 function currentContextLabel(){
   if(listMode === 'favorites') return 'Favorites';
@@ -816,6 +817,35 @@ function setPlayIcon(playing){
   reelIcon.classList.toggle('spinning', playing);
   miniReel.classList.toggle('spinning', playing);
   updateMiniPlayer();
+  updateMediaSession();
+}
+
+/* ---------------- media session (lock-screen controls + background playback) ---------------- */
+function updateMediaSession(){
+  if(!('mediaSession' in navigator)) return;
+  const track = tracks[currentIndex];
+  if(!track){
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
+    return;
+  }
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track.title,
+    artist: 'Mixtape',
+    album: currentContextLabel()
+  });
+  navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+}
+if('mediaSession' in navigator){
+  navigator.mediaSession.setActionHandler('play', () => togglePlay());
+  navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+  navigator.mediaSession.setActionHandler('previoustrack', () => stepTrack(-1));
+  navigator.mediaSession.setActionHandler('nexttrack', () => stepTrack(1));
+  try {
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      if(details.seekTime != null && audio.duration) audio.currentTime = details.seekTime;
+    });
+  } catch(e) { /* not supported on this WebView version */ }
 }
 function togglePlay(){
   if(currentIndex === -1){
