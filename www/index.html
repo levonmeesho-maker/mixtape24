@@ -93,7 +93,13 @@
   .screen.active{display:block;}
 
   /* ---------- Home / Now playing ---------- */
-  #screen-home.active{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100% - 0px);padding:24px 22px 32px 22px;text-align:center;}
+  #screen-home.active{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:calc(100% - 0px);padding:20px 0 16px 0;text-align:center;}
+  #screen-home .home-player-inner{padding:0 22px;width:100%;display:flex;flex-direction:column;align-items:center;}
+  .home-list-label{
+    width:100%;text-align:left;padding:18px 16px 6px 16px;
+    font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-faint);font-weight:600;
+  }
+  #homeList{width:100%;padding:0 10px calc(var(--mini-h) + 16px) 10px;}
   .art-box{
     width:min(58vw,220px);height:min(58vw,220px);border-radius:50%;
     background:var(--surface-2);border:1px solid var(--border-soft);
@@ -268,7 +274,7 @@
   <div class="content" id="content">
 
     <div class="screen" id="screen-home">
-      <div id="homePlayer" style="width:100%; display:flex; flex-direction:column; align-items:center;">
+      <div id="homePlayer" class="home-player-inner">
         <div class="art-box">
           <svg id="reelIcon" viewBox="0 0 200 200">
             <circle cx="100" cy="100" r="96" fill="#0c0c0c"/>
@@ -289,7 +295,7 @@
             <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
           </button>
         </div>
-        <div class="home-sub" id="npSub">Tap play to start, or add songs from the menu</div>
+        <div class="home-sub" id="npSub">Tap a song below to play it</div>
         <div class="seek-row">
           <span class="counter" id="curTime">0:00</span>
           <input type="range" id="seek" min="0" max="1000" value="0">
@@ -317,6 +323,8 @@
           <input type="range" id="volume" min="0" max="100" value="80">
         </div>
       </div>
+      <div class="home-list-label">Your songs</div>
+      <div id="homeList"></div>
     </div>
 
     <div class="screen" id="screen-list">
@@ -581,6 +589,44 @@ function getFilteredTracks(){
   if(listMode === 'playlist' && currentTapeId) list = list.filter(t => t.tapeIds.includes(currentTapeId));
   return list;
 }
+function buildTrackRow(track, onSelect){
+  const isPlaying = tracks[currentIndex] && tracks[currentIndex].id === track.id;
+  const row = document.createElement('div');
+  row.className = 'track-row' + (isPlaying ? ' playing' : '');
+  row.innerHTML = `
+    <div class="row-art">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
+      <div class="eq"><span></span><span></span><span></span></div>
+    </div>
+    <div class="row-info">
+      <div class="row-title">${escapeHtml(track.title)}</div>
+      <div class="row-sub">${track.duration ? fmtTime(track.duration) : '—:—'}</div>
+    </div>
+    <div class="row-actions">
+      <button class="icon-btn fav ${track.favorite ? 'active' : ''}" aria-label="Favorite" data-id="${track.id}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="${track.favorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.35-9.5-8.8C.9 8.8 2.6 5 6.2 5c2 0 3.3 1 4.8 3 1.5-2 2.8-3 4.8-3 3.6 0 5.3 3.8 3.7 7.2C19 16.65 12 21 12 21z"/></svg>
+      </button>
+      <button class="icon-btn add" aria-label="Add to playlist" data-id="${track.id}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  `;
+  row.addEventListener('click', (e) => {
+    if(e.target.closest('.icon-btn')) return;
+    onSelect(track);
+  });
+  row.querySelector('.fav').addEventListener('click', (e) => {
+    e.stopPropagation();
+    track.favorite = !track.favorite;
+    renderAll();
+    persistTrack(track);
+  });
+  row.querySelector('.add').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTapeMenu(track, row);
+  });
+  return row;
+}
 function renderList(){
   const list = getFilteredTracks();
   playingList = list;
@@ -603,43 +649,28 @@ function renderList(){
 
   el.innerHTML = '';
   list.forEach(track => {
-    const isPlaying = tracks[currentIndex] && tracks[currentIndex].id === track.id;
-    const row = document.createElement('div');
-    row.className = 'track-row' + (isPlaying ? ' playing' : '');
-    row.innerHTML = `
-      <div class="row-art">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
-        <div class="eq"><span></span><span></span><span></span></div>
-      </div>
-      <div class="row-info">
-        <div class="row-title">${escapeHtml(track.title)}</div>
-        <div class="row-sub">${track.duration ? fmtTime(track.duration) : '—:—'}</div>
-      </div>
-      <div class="row-actions">
-        <button class="icon-btn fav ${track.favorite ? 'active' : ''}" aria-label="Favorite" data-id="${track.id}">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="${track.favorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.35-9.5-8.8C.9 8.8 2.6 5 6.2 5c2 0 3.3 1 4.8 3 1.5-2 2.8-3 4.8-3 3.6 0 5.3 3.8 3.7 7.2C19 16.65 12 21 12 21z"/></svg>
-        </button>
-        <button class="icon-btn add" aria-label="Add to playlist" data-id="${track.id}">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-      </div>
-    `;
-    row.addEventListener('click', (e) => {
-      if(e.target.closest('.icon-btn')) return;
-      playTrackById(track.id);
+    el.appendChild(buildTrackRow(track, (t) => {
+      playTrackById(t.id);
       goScreen('home');
-    });
-    row.querySelector('.fav').addEventListener('click', (e) => {
-      e.stopPropagation();
-      track.favorite = !track.favorite;
-      renderAll();
-      persistTrack(track);
-    });
-    row.querySelector('.add').addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleTapeMenu(track, row);
-    });
-    el.appendChild(row);
+    }));
+  });
+}
+function renderHomeList(){
+  const el = document.getElementById('homeList');
+  if(tracks.length === 0){
+    el.innerHTML = `<div class="empty-state">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <b>No songs yet</b><span>Add songs from the menu to get started</span>
+    </div>`;
+    return;
+  }
+  el.innerHTML = '';
+  tracks.forEach(track => {
+    el.appendChild(buildTrackRow(track, (t) => {
+      listMode = 'all';
+      currentTapeId = null;
+      playTrackById(t.id);
+    }));
   });
 }
 function toggleTapeMenu(track, row){
@@ -699,7 +730,8 @@ function playTrackById(id){
   currentIndex = idx;
   const track = tracks[idx];
   audio.src = track.url;
-  audio.play();
+  const p = audio.play();
+  if(p && p.catch) p.catch(err => console.error('Playback failed:', err));
   renderAll();
 }
 function currentContextLabel(){
@@ -710,20 +742,18 @@ function currentContextLabel(){
 function renderHome(){
   const track = tracks[currentIndex];
   const favBtn = document.getElementById('npFavBtn');
+  const playerBlock = document.getElementById('homePlayer');
   if(!track){
-    document.getElementById('npTitle').textContent = tracks.length > 0 ? 'No song selected' : 'No songs yet';
-    document.getElementById('npSub').textContent = tracks.length > 0 ? 'Tap play to start, or pick a song from All songs' : 'Add songs from the menu to get started';
-    document.getElementById('curTime').textContent = '0:00';
-    document.getElementById('durTime').textContent = '0:00';
-    document.getElementById('seek').value = 0;
-    favBtn.classList.remove('active');
-    favBtn.querySelector('svg').setAttribute('fill', 'none');
+    playerBlock.style.display = 'none';
+    renderHomeList();
     return;
   }
+  playerBlock.style.display = 'flex';
   document.getElementById('npTitle').textContent = track.title;
   document.getElementById('npSub').textContent = 'Playing from ' + currentContextLabel();
   favBtn.classList.toggle('active', !!track.favorite);
   favBtn.querySelector('svg').setAttribute('fill', track.favorite ? 'currentColor' : 'none');
+  renderHomeList();
 }
 document.getElementById('npFavBtn').addEventListener('click', () => {
   const track = tracks[currentIndex];
@@ -778,7 +808,12 @@ function togglePlay(){
     else { goScreen('addsong'); }
     return;
   }
-  if(audio.paused) audio.play(); else audio.pause();
+  if(audio.paused){
+    const p = audio.play();
+    if(p && p.catch) p.catch(err => console.error('Playback failed:', err));
+  } else {
+    audio.pause();
+  }
 }
 playBtn.addEventListener('click', togglePlay);
 document.getElementById('miniPlayBtn').addEventListener('click', (e) => { e.stopPropagation(); togglePlay(); });
