@@ -32,6 +32,33 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Patch Android manifest for file access permissions
+        run: |
+          python3 - << 'PYEOF'
+          import re
+          path = "android/app/src/main/AndroidManifest.xml"
+          with open(path) as f:
+              content = f.read()
+
+          perms = (
+              '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>\n'
+              '    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n'
+          )
+          if 'READ_MEDIA_AUDIO' not in content:
+              content = re.sub(r'(<manifest[^>]*>)', r'\1\n' + perms, content, count=1)
+
+          if 'android:requestLegacyExternalStorage' not in content:
+              content = re.sub(
+                  r'(<application\b)',
+                  r'\1 android:requestLegacyExternalStorage="true"',
+                  content, count=1
+              )
+
+          with open(path, "w") as f:
+              f.write(content)
+          print("Patched AndroidManifest.xml")
+          PYEOF
+
       - name: Sync web assets into Android project
         run: npx cap sync android
 
