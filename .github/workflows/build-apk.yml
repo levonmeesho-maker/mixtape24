@@ -43,6 +43,8 @@ jobs:
           perms = (
               '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>\n'
               '    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n'
+              '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
+              '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
           )
           if 'READ_MEDIA_AUDIO' not in content:
               content = re.sub(r'(<manifest[^>]*>)', r'\1\n' + perms, content, count=1)
